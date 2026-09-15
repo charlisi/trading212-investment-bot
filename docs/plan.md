@@ -8,6 +8,27 @@ Build a private, research-oriented AI bot that can learn from Trading 212 portfo
 
 The first usable release will collect and report on demo-account data. It will not train a predictive model, provide investment recommendations, simulate execution, or call Trading 212 mutation endpoints.
 
+## Hybrid Architecture
+
+The bot is implemented as a **hybrid AI agent system**:
+
+1. **Agent Layer (Instructions & Skills)**:
+   - Persona and guardrails defined in [`.github/copilot-instructions.md`](../.github/copilot-instructions.md).
+   - Domain skills in [`.github/skills/`](../.github/skills/):
+     - `portfolio-audit`: Audits balances, positions, cash reserves, and saves snapshots to local SQLite.
+     - `market-scanner`: Analyzes historical price series, moving averages, and volatility via Yahoo Finance MCP.
+     - `trade-proposer`: Formulates proposed risk-managed rebalancing or trade actions with strict human confirmation required before any order execution.
+
+2. **Tooling Layer (MCP Servers)**:
+   - Configured in [`.vscode/mcp.json`](../.vscode/mcp.json).
+   - `trading212-demo`: Local stdio connection to Trading 212 Practice account.
+   - `yfinance`: Local stdio connection to Yahoo Finance via `uvx` (no API key required).
+
+3. **Core Engine (Python)**:
+   - `storage.py`: SQLite schema (`./data/portfolio.db`) for snapshots, holdings, and price series.
+   - `analytics.py`: Pure math functions for weights, concentration (HHI), moving averages, drawdowns, and volatility.
+   - `cli.py`: Command-line interface for offline summaries and verification.
+
 ### Data flow
 
 ```text
