@@ -16,9 +16,12 @@ This milestone does not place orders, cancel orders, mutate pies, request export
 
 ## Architecture direction
 
-The application will be implemented in Python with `uv`. The MCP server remains a separate local checkout and is configured through an absolute path. The bot will enforce its own read-only tool allowlist because MCP tool annotations describe effects but do not provide authorization.
+The application is implemented in Python with `uv`. It uses two MCP servers over local `stdio`:
 
-Trading 212 account history is not an independent market-data feed. Forecasting or strategy backtesting will require additional historical price, corporate-action, and benchmark data and is outside the first milestone.
+1. **Trading 212 MCP Server** (`trading212-mcp-server`): Connects to your Trading 212 demo account for account state, positions, transactions, orders, and dividends. The bot strictly enforces an internal read-only allowlist to block all order and mutation tools.
+2. **Yahoo Finance MCP Server** (`mcp-server-yfinance` via `uvx`): Provides market price feeds, historical OHLCV candles, benchmarks, and indicators for stocks without requiring any API key.
+
+By combining account state from Trading 212 with public market data from Yahoo Finance, the bot can construct feature sets, benchmark portfolio performance, and train investment models safely offline.
 
 ## Planned milestones
 

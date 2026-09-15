@@ -9,6 +9,13 @@
         "TRADING212_API_SECRET": "${env:TRADING212_API_SECRET}",
         "ENVIRONMENT": "demo"
       }
+    },
+    "yfinance": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-yfinance"
+      ]
     }
   }
 }

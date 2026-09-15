@@ -11,31 +11,36 @@ The first usable release will collect and report on demo-account data. It will n
 ### Data flow
 
 ```text
-Trading 212 demo account
-          |
-          v
-Trading 212 MCP server (local stdio)
-          |
-          v
-Read-only MCP adapter and tool allowlist
-          |
-          v
-Raw payload archive + normalized SQLite tables
-          |
-          v
-Offline portfolio-history analytics and reports
+Trading 212 Demo Account              Yahoo Finance Market Feed
+         |                                     |
+         v                                     v
+Trading 212 MCP Server (stdio)        mcp-server-yfinance (stdio, no key)
+         |                                     |
+         +------------------+------------------+
+                            |
+                            v
+            Dual MCP Adapter & Tool Allowlist
+                            |
+                            v
+       Raw Payload Archive + Normalized SQLite Tables
+                            |
+                            v
+   Offline Portfolio Analytics, Market Context & Feature Store
 ```
 
 ## Components
 
-### MCP adapter
+### MCP Adapters
 
-- Start or connect to the separately checked-out Trading 212 MCP server.
-- Use stdio transport.
-- Allow account, position, order-history, transaction, dividend, and metadata reads.
-- Reject order placement, order cancellation, pie mutations, and CSV export requests.
-- Handle `nextPagePath` cursors explicitly.
-- Record retrieval timestamps and cache metadata.
+1. **Trading 212 Adapter** (`trading212-mcp-server` over stdio):
+   - Allow account, position, order history, transactions, dividends, and instrument metadata.
+   - Reject order placement, order cancellation, pie mutations, and CSV export requests.
+   - Handle pagination (`nextPagePath`) and record retrieval metadata.
+
+2. **Market Data Adapter** (`mcp-server-yfinance` over stdio via `uvx`):
+   - Requires **no API key**.
+   - Pull historical OHLCV price series (`get_history`), key financials, and market benchmarks for stocks held or watched in Trading 212.
+   - Provide historical bars for feature calculation, volatility analysis, and price normalization.
 
 ### Storage
 
