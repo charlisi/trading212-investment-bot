@@ -6,7 +6,7 @@
 - **Start Date**: September 15, 2026
 - **Target Completion Date**: September 15, 2027
 - **Starting Capital**: **£5,000.00 GBP** (~$6,738.50 USD at 1.3477 FX)
-- **Account**: Trading 212 Practice (Demo) Account ID `51058370`
+- **Account Environment**: Trading 212 Practice (Demo)
 - **Initial Baseline Snapshots**:
   - Snapshot #1 (100% Cash): £5,000.00
   - Snapshot #2 (Funded Allocation): £4,991.62 invested across 6 growth pillars + £389.28 cash buffer.

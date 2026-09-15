@@ -16,9 +16,18 @@ from .storage import get_db_path, get_latest_snapshot, init_db, save_price_serie
 def call_trading212_mcp(tool_name: str, arguments: dict | None = None) -> dict:
     """Call a tool on the local trading212-mcp-server over stdio."""
     import os
+    from pathlib import Path
     env = os.environ.copy()
+    
+    server_bin = os.getenv("TRADING212_MCP_BIN")
+    if not server_bin:
+        # Default relative to project root or fallback to common local directory
+        project_root = Path(__file__).resolve().parent.parent.parent
+        candidate = project_root.parent / "trading212-mcp-server" / ".venv" / "bin" / "trading212-mcp-server"
+        server_bin = str(candidate) if candidate.exists() else "trading212-mcp-server"
+
     proc = subprocess.Popen(
-        ["/Users/carlos/Documents/Investment/trading212-mcp-server/.venv/bin/trading212-mcp-server"],
+        [server_bin],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

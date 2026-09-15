@@ -2,7 +2,7 @@
   "servers": {
     "trading212-demo": {
       "type": "stdio",
-      "command": "/Users/carlos/Documents/Investment/trading212-mcp-server/.venv/bin/trading212-mcp-server",
+      "command": "${workspaceFolder}/../trading212-mcp-server/.venv/bin/trading212-mcp-server",
       "args": [],
       "env": {
         "TRADING212_API_KEY": "${env:TRADING212_API_KEY}",

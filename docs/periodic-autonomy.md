@@ -34,13 +34,13 @@ graph TD
 
 * **Schedule**: Every trading day (Monday–Friday) at **21:15 UK time / 16:15 EST** (15 minutes after US market close).
 * **Location**: `~/Library/LaunchAgents/com.tradingbot.portfolio-monitor.plist`
-* **Command Executed**: `uv run --directory /Users/carlos/Documents/Investment/Bot trading-bot run-cycle`
+* **Command Executed**: `uv run trading-bot run-cycle`
 
 ### Option B: Crontab
 For traditional unix scheduling:
 ```bash
 # Run at 21:15 UK time Monday through Friday
-15 21 * * 1-5 cd /Users/carlos/Documents/Investment/Bot && uv run trading-bot run-cycle >> /Users/carlos/Documents/Investment/Bot/data/runner.log 2>&1
+15 21 * * 1-5 cd ~/path/to/trading212-ai-bot && uv run trading-bot run-cycle >> data/runner.log 2>&1
 ```
 
 ### Option C: Python Background Daemon Loop
