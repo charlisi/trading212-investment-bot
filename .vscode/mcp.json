@@ -2,14 +2,8 @@
   "servers": {
     "trading212-demo": {
       "type": "stdio",
-      "command": "uv",
-      "args": [
-        "run",
-        "--frozen",
-        "--directory",
-        "/absolute/path/to/trading212-mcp-server",
-        "trading212-mcp-server"
-      ],
+      "command": "/Users/carlos/Documents/Investment/trading212-mcp-server/.venv/bin/trading212-mcp-server",
+      "args": [],
       "env": {
         "TRADING212_API_KEY": "${env:TRADING212_API_KEY}",
         "TRADING212_API_SECRET": "${env:TRADING212_API_SECRET}",
