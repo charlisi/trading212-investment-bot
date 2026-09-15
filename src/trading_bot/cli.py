@@ -9,7 +9,62 @@ import sys
 
 from .analytics import calculate_hhi, calculate_weights
 from .config import Settings
-from .storage import get_db_path, get_latest_snapshot, init_db, save_price_series
+from .rebalancer import evaluate_portfolio_state
+from .storage import get_db_path, get_latest_snapshot, init_db, save_price_series, save_snapshot
+
+
+def call_trading212_mcp(tool_name: str, arguments: dict | None = None) -> dict:
+    """Call a tool on the local trading212-mcp-server over stdio."""
+    import os
+    env = os.environ.copy()
+    proc = subprocess.Popen(
+        ["/Users/carlos/Documents/Investment/trading212-mcp-server/.venv/bin/trading212-mcp-server"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+
+    def send_recv(req: dict) -> dict:
+        proc.stdin.write(json.dumps(req) + "\n")
+        proc.stdin.flush()
+        line = proc.stdout.readline()
+        if not line:
+            err = proc.stderr.read()
+            raise RuntimeError(f"Trading 212 MCP server failed: {err}")
+        return json.loads(line)
+
+    try:
+        send_recv(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "trading-bot-cli", "version": "0.1.0"},
+                },
+            }
+        )
+        proc.stdin.write(
+            json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
+            + "\n"
+        )
+        proc.stdin.flush()
+
+        res = send_recv(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": tool_name, "arguments": arguments or {}},
+            }
+        )
+        return res.get("result", {}).get("structuredContent", {})
+    finally:
+        proc.terminate()
 
 
 def fetch_yahoo_history(ticker: str, period: str = "1mo", interval: str = "1d") -> list[dict]:
@@ -82,6 +137,15 @@ def main() -> None:
     fetch_parser.add_argument("--period", default="1mo", help="Lookback period (e.g. 5d, 1mo, 6mo, 1y, 5y)")
     fetch_parser.add_argument("--interval", default="1d", help="Candle interval (e.g. 1d, 1wk, 1h)")
 
+    cycle_parser = subparsers.add_parser(
+        "run-cycle", help="Periodic monitoring cycle: audits portfolio, computes alpha vs SPY/QQQ, checks rebalance triggers."
+    )
+    cycle_parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Automatically execute proposed rebalance orders (Trading 212 Demo only).",
+    )
+
     args = parser.parse_args()
     settings = Settings.from_env()
 
@@ -134,6 +198,103 @@ def main() -> None:
                 print(
                     f"  - {ticker}: {pos['quantity']} shares @ {pos['current_price']} {snapshot['currency']} (Value: {pos['current_value']:,.2f}, Weight: {w:.1f}%)"
                 )
+
+    elif args.command == "run-cycle":
+        print("=== Running Periodic Monitoring & Evaluation Cycle ===")
+        # 1. Fetch Trading 212 state
+        summary = call_trading212_mcp("fetch_account_summary")
+        positions_res = call_trading212_mcp("fetch_positions")
+        raw_positions = positions_res.get("result", [])
+
+        # 2. Fetch current Benchmark prices
+        spy_candles = fetch_yahoo_history("SPY", period="5d", interval="1d")
+        qqq_candles = fetch_yahoo_history("QQQ", period="5d", interval="1d")
+        spy_price = float(spy_candles[-1]["Close"]) if spy_candles else 756.69
+        qqq_price = float(qqq_candles[-1]["Close"]) if qqq_candles else 703.81
+
+        # 3. Save snapshot to SQLite
+        normalized_positions = []
+        for p in raw_positions:
+            ticker = p.get("instrument", {}).get("ticker", "UNKNOWN")
+            qty = p.get("quantity", 0.0)
+            avg_p = p.get("averagePricePaid", 0.0)
+            cur_p = p.get("currentPrice", 0.0)
+            wallet = p.get("walletImpact", {})
+            cur_val = wallet.get("currentValue", 0.0)
+            unrealized = wallet.get("unrealizedProfitLoss", 0.0)
+            normalized_positions.append(
+                {
+                    "ticker": ticker,
+                    "quantity": qty,
+                    "averagePrice": avg_p,
+                    "currentPrice": cur_p,
+                    "currentValue": cur_val,
+                    "unrealizedProfitLoss": unrealized,
+                }
+            )
+
+        db_path = get_db_path(settings.data_dir)
+        conn = init_db(db_path)
+        snap_id = save_snapshot(conn, summary, normalized_positions)
+
+        # 4. Run evaluation rules
+        report = evaluate_portfolio_state(
+            account_summary=summary,
+            positions=raw_positions,
+            current_spy_price=spy_price,
+            current_qqq_price=qqq_price,
+        )
+
+        print(f"Timestamp: {report.timestamp}")
+        print(f"Total Portfolio Value: £{report.portfolio_value_gbp:,.2f} ({report.portfolio_return_pct:+.2f}%)")
+        print(f"Free Cash Reserve: £{report.cash_available_gbp:,.2f} ({report.cash_weight_pct:.1f}%)")
+        print(f"S&P 500 (SPY): ${spy_price:.2f} ({report.spy_return_pct:+.2f}%)")
+        print(f"Nasdaq 100 (QQQ): ${qqq_price:.2f} ({report.qqq_return_pct:+.2f}%)")
+        print(f"Alpha vs SPY: {report.alpha_vs_spy_pct:+.2f}%")
+        print(f"Alpha vs QQQ: {report.alpha_vs_qqq_pct:+.2f}%")
+        print(f"Max Benchmark Alpha Spread: {report.max_benchmark_alpha_pct:+.2f}% (Goal: +20.0%)")
+        print(f"Concentration (HHI): {report.hhi:.4f}")
+
+        # 5. Output triggers
+        if not report.triggers:
+            print("\nStatus: All risk limits & allocations within bounds. No rebalance needed.")
+        else:
+            print(f"\n⚠️ Rebalance Triggers Fired ({len(report.triggers)}):")
+            for t in report.triggers:
+                print(f"  - [{t.trigger_type}] {t.message}")
+
+            if report.proposed_orders:
+                print("\nProposed Actions:")
+                for o in report.proposed_orders:
+                    print(f"  - {o['action']} {o['quantity']} {o['ticker']} (~£{o['estimated_value_gbp']}) [{o['reason']}]")
+
+                if args.execute:
+                    if settings.environment != "demo":
+                        print("Autonomous execution is strictly restricted to ENVIRONMENT=demo. Aborting.")
+                        sys.exit(1)
+                    print("\nExecuting proposed orders on Trading 212 Demo...")
+                    for o in report.proposed_orders:
+                        res = call_trading212_mcp("place_market_order", {"ticker": o["ticker"], "quantity": -o["quantity"] if o["action"] == "SELL" else o["quantity"]})
+                        print(f"Executed {o['action']} {o['ticker']}: {res.get('status')}")
+
+        # Save evaluation report to JSON file
+        report_file = settings.data_dir / "latest_evaluation.json"
+        with open(report_file, "w") as f:
+            json.dump(
+                {
+                    "timestamp": report.timestamp,
+                    "portfolio_value_gbp": report.portfolio_value_gbp,
+                    "cash_available_gbp": report.cash_available_gbp,
+                    "portfolio_return_pct": report.portfolio_return_pct,
+                    "alpha_spread_pct": report.max_benchmark_alpha_pct,
+                    "hhi": report.hhi,
+                    "triggers": [t.message for t in report.triggers],
+                    "proposed_orders": report.proposed_orders,
+                },
+                f,
+                indent=2,
+            )
+        print(f"\nSaved evaluation report to {report_file}")
 
 
 if __name__ == "__main__":

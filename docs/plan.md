@@ -19,15 +19,20 @@ The bot is implemented as a **hybrid AI agent system**:
      - `market-scanner`: Analyzes historical price series, moving averages, and volatility via Yahoo Finance MCP.
      - `trade-proposer`: Formulates proposed risk-managed rebalancing or trade actions with strict human confirmation required before any order execution.
 
-2. **Tooling Layer (MCP Servers)**:
+2. **Periodic Autonomy & Challenge Goals**:
+   - **Challenge Goals**: Documented in [`docs/challenge-goals.md`](challenge-goals.md) (Target: +20% alpha spread over S&P 500 / Nasdaq 100 in 12 months).
+   - **Autonomy Architecture**: Documented in [`docs/periodic-autonomy.md`](periodic-autonomy.md) (macOS `launchd` / cron runner for market-close evaluations, drift monitoring, and guarded execution).
+
+3. **Tooling Layer (MCP Servers)**:
    - Configured in [`.vscode/mcp.json`](../.vscode/mcp.json).
    - `trading212-demo`: Local stdio connection to Trading 212 Practice account.
    - `yfinance`: Local stdio connection to Yahoo Finance via `uvx` (no API key required).
 
-3. **Core Engine (Python)**:
+4. **Core Engine (Python)**:
    - `storage.py`: SQLite schema (`./data/portfolio.db`) for snapshots, holdings, and price series.
    - `analytics.py`: Pure math functions for weights, concentration (HHI), moving averages, drawdowns, and volatility.
-   - `cli.py`: Command-line interface for offline summaries and verification.
+   - `rebalancer.py`: Automated drift evaluation, benchmark alpha tracking, and rebalancing decisions.
+   - `cli.py`: Command-line interface for summaries, market fetches, and scheduled `run-cycle` triggers.
 
 ### Data flow
 
